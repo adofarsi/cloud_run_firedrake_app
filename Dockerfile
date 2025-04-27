@@ -24,10 +24,10 @@ RUN mkdir /opt/thetis-notebooks \
 # Expose streamlit port
 EXPOSE 7860
 
-CMD ["jupyter", "notebook", \
-     "--ip=0.0.0.0", \
-     "--port=7860", \
-     "--no-browser", \
-     "--allow-root", \
-     "--NotebookApp.token=''", \
-     "--NotebookApp.password=''"]
+CMD sh -c "jupyter notebook \
+    --ip=0.0.0.0 \
+    --port=${PORT:-7860} \
+    --no-browser \
+    --allow-root \
+    --NotebookApp.token='' \
+    --NotebookApp.password=''"
