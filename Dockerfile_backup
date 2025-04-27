@@ -1,0 +1,99 @@
+# Dockerfile for a plain Firedrake suitable for testing Firedrake components and applications
+
+FROM ubuntu:latest
+
+# Firedrake arch to build
+ARG ARCH="default"
+
+# Set '-o pipefail' to avoid linter error (https://github.com/hadolint/hadolint/wiki/DL4006)
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Use a more sane locale
+ENV LC_ALL=C.UTF-8
+
+# Avoid tzdata prompt
+# (https://stackoverflow.com/questions/61388002/how-to-avoid-question-during-the-docker-build)
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Europe/London
+
+RUN apt-get update \
+    && apt-get -y dist-upgrade \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata \
+        curl vim docker.io openssh-client build-essential autoconf automake \
+        cmake gfortran git libopenblas-serial-dev libtool python3-dev python3-pip python3-tk \
+        python3-venv python3-requests zlib1g-dev libboost-dev sudo gmsh bison flex ninja-build \
+        libocct-ocaf-dev libocct-data-exchange-dev swig graphviz libcurl4-openssl-dev libxml2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Allow pip to install into system package locations without prompting
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+ENV OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+
+# Download firedrake-configure
+RUN curl -O --output-dir /opt https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-configure
+
+# Install system dependencies
+RUN apt-get update \
+    && apt-get -y install \
+        $(python3 /opt/firedrake-configure --arch $ARCH --show-system-packages) \
+    && rm -rf /var/lib/apt/lists/*
+
+# OpenMPI will complain if mpiexec is invoked as root unless these are set
+ENV OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+
+# # entry point to run the container without killing it
+# ENTRYPOINT ["tail", "-f", "/dev/null"]
+
+# Install PETSc. We set the compiler optimisation flags manually here to
+# remove the default of '-march=native -mtune=native' which is not suitable for Docker images.
+RUN git clone --depth 1 --branch $(python3 /opt/firedrake-configure --show-petsc-version) https://gitlab.com/petsc/petsc.git /opt/petsc \
+    && cd /opt/petsc \
+    && python3 /opt/firedrake-configure --arch $ARCH --show-petsc-configure-options | \
+        sed "s/-march=native -mtune=native/-mtune=generic/g" | \
+        xargs -L1 ./configure \
+        --COPTFLAGS=-O3 -march=native -mtune=native \
+        --CXXOPTFLAGS=-O3 -march=native -mtune=native \
+        --FOPTFLAGS=-O3 -march=native -mtune=native \
+        --with-c2html=0 \
+        --with-debugging=0 \
+        --with-fortran-bindings=0 \
+        --with-make-np=12 \
+        --with-shared-libraries=1 \
+        --with-zlib \
+        --download-eigen \
+        --download-fftw \
+        --download-hdf5 \
+        --download-hwloc \
+        --download-hypre \
+        --download-metis \
+        --download-mmg \
+        --download-mumps \
+        --download-mpich \
+        --download-mpich-device=ch3:sock \
+        --download-netcdf \
+        --download-parmmg \
+        --download-pastix \
+        --download-pnetcdf \
+        --download-ptscotch \
+        --download-scalapack \
+        --download-suitesparse \
+        --download-superlu_dist \
+    && make \
+    && make check \
+    && rm -rf ./**/externalpackages \
+    && rm -rf ./src/docs \
+    && rm -f ./src/**/tutorials/output/* \
+    && rm -f ./src/**/tests/output/* \
+    && cd - || exit
+
+ENV PETSC_DIR=/opt/petsc PETSC_ARCH=arch-firedrake-$ARCH
+ENV PATH="$PETSC_DIR/$PETSC_ARCH/bin:$PATH"
+
+ENV HDF5_MPI=ON
+ENV CC=mpicc CXX=mpicxx
+ENV CFLAGS="-mtune=generic" CPPFLAGS="-mtune=generic"
+ENV MPICC=$CC
+
+# Install Firedrake
+RUN pip install --verbose --no-binary h5py --src /opt \
+        --editable git+https://github.com/firedrakeproject/firedrake.git#egg=firedrake[docker]
