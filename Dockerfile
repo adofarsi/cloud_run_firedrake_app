@@ -25,4 +25,4 @@ RUN mkdir /opt/thetis-notebooks \
 EXPOSE 7860
 
 # Start Jupyter Lab on port 7860, listening on all interfaces
-CMD ["jupyter", "nbclassic", "--ip", "0.0.0.0", "--port", "7860", "--no-browser", "--allow-root"]
+CMD ["jupyter", "lab", "--ip", "0.0.0.0", "--port", "7860", "--no-browser", "--allow-root"]
