@@ -3,7 +3,7 @@
 FROM firedrakeproject/firedrake:latest
 
 # Install an iPython kernel for Firedrake
-RUN pip install --verbose nbclassic nbformat nbconvert ipympl \
+RUN pip install --verbose jupyterlab nbclassic nbformat nbconvert ipympl \
     && jupyter nbclassic --generate-config
 
 # Move the notebooks and strip their output
